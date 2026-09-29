@@ -1,0 +1,44 @@
+"""Excel'deki B-F sütunlarını klasör hiyerarşisine çevirir."""
+
+from pathlib import Path
+import sys
+
+from openpyxl import load_workbook
+
+
+def main() -> None:
+    excel = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("Yeni Microsoft Excel Çalışma Sayfası.xlsx")
+    if not excel.is_file():
+        raise SystemExit(f"Excel dosyası bulunamadı: {excel}")
+
+    hedef = Path("Klasor_Yapisi")
+    sayfa = load_workbook(excel, read_only=True, data_only=True).active
+    ust_klasorler: list[str | None] = [None] * 5  # B, C, D, E, F
+    olusturulan = 0
+
+    for satir in sayfa.iter_rows(min_col=2, max_col=6):
+        dolu = [(hucre.column - 2, str(hucre.value).strip())
+                for hucre in satir if hucre.value is not None and str(hucre.value).strip()]
+        if not dolu:
+            continue
+        if len(dolu) != 1:
+            raise ValueError(f"{satir[0].row}. satırda birden fazla klasör adı var.")
+
+        seviye, ad = dolu[0]
+        if ad in {".", ".."} or any(isaret in ad for isaret in '<>:"/\\|?*'):
+            raise ValueError(f"{satir[0].row}. satırda geçersiz klasör adı: {ad}")
+        if seviye > 0 and ust_klasorler[seviye - 1] is None:
+            raise ValueError(f"{satir[0].row}. satırın üst klasörü bulunamadı: {ad}")
+
+        ust_klasorler[seviye] = ad
+        ust_klasorler[seviye + 1:] = [None] * (4 - seviye)
+        yol = hedef.joinpath(*(x for x in ust_klasorler[:seviye + 1] if x is not None))
+        yol.mkdir(parents=True, exist_ok=True)
+        (yol / ".gitkeep").touch(exist_ok=True)
+        olusturulan += 1
+
+    print(f"{olusturulan} klasör hazırlandı: {hedef.resolve()}")
+
+
+if __name__ == "__main__":
+    main()
